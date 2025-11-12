@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { BrowserMultiFormatReader, IScannerControls } from "@zxing/browser"
+import { DecodeHintType, BarcodeFormat } from "@zxing/library"
 
 interface QRScannerProps {
   onScan: (data: string) => void
@@ -23,7 +24,13 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
 
 
   useEffect(() => {
-    readerRef.current = new BrowserMultiFormatReader()
+    const reader = new BrowserMultiFormatReader()
+    // Configure hints for better QR code detection
+    const hints = new Map()
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE])
+    hints.set(DecodeHintType.TRY_HARDER, true)
+    reader.hints = hints
+    readerRef.current = reader
     return () => {
       isMountedRef.current = false
     }
@@ -35,6 +42,16 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
     setError(null)
     setPermissionDenied(false)
     hasScannedRef.current = false
+    
+    // Reset any existing controls
+    if (controlsRef.current) {
+      try {
+        controlsRef.current.stop()
+      } catch (e) {
+        console.warn("[QRScanner] Error stopping previous controls:", e)
+      }
+      controlsRef.current = null
+    }
 
     try {
       const reader = readerRef.current!
@@ -67,15 +84,38 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
 
           // Set the stream to the video element
           videoElement.srcObject = stream
-          await new Promise((resolve) => {
+          
+          // Wait for video metadata and ensure it's playing
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error("Video loading timeout"))
+            }, 10000)
+            
             videoElement.onloadedmetadata = () => {
+              clearTimeout(timeout)
               videoElement.play()
-              resolve(undefined)
+                .then(() => {
+                  // Wait for video to actually start playing with frames
+                  const checkPlaying = () => {
+                    if (videoElement.readyState >= 2 && !videoElement.paused && videoElement.currentTime > 0) {
+                      resolve()
+                    } else {
+                      setTimeout(checkPlaying, 100)
+                    }
+                  }
+                  checkPlaying()
+                })
+                .catch(reject)
+            }
+            
+            videoElement.onerror = () => {
+              clearTimeout(timeout)
+              reject(new Error("Video element error"))
             }
           })
 
-          // Wait a bit for video to be ready
-          await new Promise(resolve => setTimeout(resolve, 500))
+          // Additional wait to ensure video frames are available
+          await new Promise(resolve => setTimeout(resolve, 1000))
 
           if (!isMountedRef.current || !videoElement) {
             stream.getTracks().forEach(track => track.stop())
@@ -83,52 +123,78 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             return
           }
 
+          console.log("[QRScanner] Starting QR code detection...")
+          console.log("[QRScanner] Video element state:", {
+            readyState: videoElement.readyState,
+            paused: videoElement.paused,
+            currentTime: videoElement.currentTime,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight,
+          })
+          
           // Use decodeFromVideoElement for continuous scanning
           const controls = await reader.decodeFromVideoElement(
             videoElement,
             (result, err) => {
+              console.log("[QRScanner] Callback called:", { hasResult: !!result, hasError: !!err })
+              
               if (!isMountedRef.current) {
-                controls.stop()
-                return
-              }
-
-
-              if (result && !hasScannedRef.current) {
-                hasScannedRef.current = true
-                const scannedText = result.getText()
-                console.log("[QRScanner] ✅ QR detected:", scannedText)
-
-                navigator.vibrate?.(200)
-
-                if (isMountedRef.current) {
-                  setShowSuccess(true)
-                  setTimeout(() => {
-                    if (isMountedRef.current) {
-                      setShowSuccess(false)
-                    }
-                  }, 2000)
-                }
                 if (controls) {
-                   controls.stop()
+                  controls.stop().catch(() => {})
                 }
-                if (streamRef.current) {
-                  streamRef.current.getTracks().forEach(track => track.stop())
-                  streamRef.current = null
-                }
-                controlsRef.current = null
-                if (isMountedRef.current) {
-                  setIsCameraActive(false)
-                }
-                onScan(scannedText)
                 return
               }
 
-              // Suppress "not found" errors - they're expected during scanning
-              if (err && err.name !== "NotFoundException") {
-                console.warn("[QRScanner] scan error:", err.name)
+              // Handle error first
+              if (err) {
+                // Suppress "not found" errors - they're expected during scanning
+                if (err.name !== "NotFoundException") {
+                  console.warn("[QRScanner] scan error:", err.name, err.message)
+                }
+                return
+              }
+
+              // Handle successful result
+              if (result && !hasScannedRef.current) {
+                try {
+                  hasScannedRef.current = true
+                  const scannedText = result.getText()
+                  console.log("[QRScanner] ✅ QR detected:", scannedText)
+
+                  navigator.vibrate?.(200)
+
+                  if (isMountedRef.current) {
+                    setShowSuccess(true)
+                    setTimeout(() => {
+                      if (isMountedRef.current) {
+                        setShowSuccess(false)
+                      }
+                    }, 2000)
+                  }
+                  
+                  // Stop scanning
+                  if (controls) {
+                    controls.stop().catch(() => {})
+                  }
+                  if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop())
+                    streamRef.current = null
+                  }
+                  controlsRef.current = null
+                  if (isMountedRef.current) {
+                    setIsCameraActive(false)
+                  }
+                  onScan(scannedText)
+                } catch (e) {
+                  console.error("[QRScanner] Error processing scan result:", e)
+                  hasScannedRef.current = false // Reset to allow retry
+                }
+                return
               }
             },
           )
+          
+          console.log("[QRScanner] Decoder started, controls:", controls)
 
           controlsRef.current = controls
           return // Successfully started, exit retry loop
@@ -247,7 +313,6 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
           autoPlay
           playsInline
           muted
-          crossOrigin="anonymous"
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
             isCameraActive ? "opacity-100" : "opacity-0"
           }`}
