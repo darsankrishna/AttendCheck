@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { BrowserMultiFormatReader, IScannerControls } from "@zxing/browser"
-import { DecodeHintType, BarcodeFormat } from "@zxing/library"
+import jsQR from "jsqr"
 
 interface QRScannerProps {
   onScan: (data: string) => void
@@ -11,30 +10,87 @@ interface QRScannerProps {
 
 export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
-  const controlsRef = useRef<IScannerControls | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
   const [isCameraActive, setIsCameraActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const hasScannedRef = useRef(false)
   const isMountedRef = useRef(true)
-  const decodePromiseRef = useRef<Promise<unknown> | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
-
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader()
-    // Configure hints for better QR code detection
-    const hints = new Map()
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE])
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    reader.hints = hints
-    readerRef.current = reader
     return () => {
       isMountedRef.current = false
+      stopCamera()
     }
   }, [])
+
+  function scanQRCode() {
+    if (!isMountedRef.current || !videoRef.current || !canvasRef.current || hasScannedRef.current) {
+      return
+    }
+
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const context = canvas.getContext("2d", { willReadFrequently: true })
+
+    if (!context || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      animationFrameRef.current = requestAnimationFrame(scanQRCode)
+      return
+    }
+
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    // Draw video frame to canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    // Get image data
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+
+    // Scan for QR code
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    })
+
+    if (code && !hasScannedRef.current) {
+      hasScannedRef.current = true
+      const scannedText = code.data
+      console.log("[QRScanner] ✅ QR detected:", scannedText)
+
+      navigator.vibrate?.(200)
+
+      if (isMountedRef.current) {
+        setShowSuccess(true)
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            setShowSuccess(false)
+          }
+        }, 2000)
+      }
+
+      // Stop scanning
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
+      if (isMountedRef.current) {
+        setIsCameraActive(false)
+      }
+      onScan(scannedText)
+      return
+    }
+
+    // Continue scanning
+    animationFrameRef.current = requestAnimationFrame(scanQRCode)
+  }
 
   async function startCamera() {
     if (!isMountedRef.current || !videoRef.current) return
@@ -42,19 +98,14 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
     setError(null)
     setPermissionDenied(false)
     hasScannedRef.current = false
-    
-    // Reset any existing controls
-    if (controlsRef.current) {
-      try {
-        controlsRef.current.stop()
-      } catch (e) {
-        console.warn("[QRScanner] Error stopping previous controls:", e)
-      }
-      controlsRef.current = null
+
+    // Stop any existing scanning
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
 
     try {
-      const reader = readerRef.current!
       const videoElement = videoRef.current
 
       if (!isMountedRef.current) return
@@ -115,7 +166,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
           })
 
           // Additional wait to ensure video frames are available
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          await new Promise(resolve => setTimeout(resolve, 500))
 
           if (!isMountedRef.current || !videoElement) {
             stream.getTracks().forEach(track => track.stop())
@@ -132,71 +183,9 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             videoHeight: videoElement.videoHeight,
           })
           
-          // Use decodeFromVideoElement for continuous scanning
-          const controls = await reader.decodeFromVideoElement(
-            videoElement,
-            (result, err) => {
-              console.log("[QRScanner] Callback called:", { hasResult: !!result, hasError: !!err })
-              
-              if (!isMountedRef.current) {
-                if (controls) {
-                  controls.stop().catch(() => {})
-                }
-                return
-              }
-
-              // Handle error first
-              if (err) {
-                // Suppress "not found" errors - they're expected during scanning
-                if (err.name !== "NotFoundException") {
-                  console.warn("[QRScanner] scan error:", err.name, err.message)
-                }
-                return
-              }
-
-              // Handle successful result
-              if (result && !hasScannedRef.current) {
-                try {
-                  hasScannedRef.current = true
-                  const scannedText = result.getText()
-                  console.log("[QRScanner] ✅ QR detected:", scannedText)
-
-                  navigator.vibrate?.(200)
-
-                  if (isMountedRef.current) {
-                    setShowSuccess(true)
-                    setTimeout(() => {
-                      if (isMountedRef.current) {
-                        setShowSuccess(false)
-                      }
-                    }, 2000)
-                  }
-                  
-                  // Stop scanning
-                  if (controls) {
-                    controls.stop().catch(() => {})
-                  }
-                  if (streamRef.current) {
-                    streamRef.current.getTracks().forEach(track => track.stop())
-                    streamRef.current = null
-                  }
-                  controlsRef.current = null
-                  if (isMountedRef.current) {
-                    setIsCameraActive(false)
-                  }
-                  onScan(scannedText)
-                } catch (e) {
-                  console.error("[QRScanner] Error processing scan result:", e)
-                  hasScannedRef.current = false // Reset to allow retry
-                }
-                return
-              }
-            },
-          )
+          // Start scanning loop
+          scanQRCode()
           
-          console.log("[QRScanner] Decoder started, controls:", controls)
-
-          controlsRef.current = controls
           return // Successfully started, exit retry loop
         } catch (err) {
           lastError = err
@@ -211,20 +200,6 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             streamRef.current.getTracks().forEach(track => track.stop())
             streamRef.current = null
           }
-          // Stop the reader before retrying
-          try {
-            if (controlsRef.current) {
-              controlsRef.current.stop()
-              controlsRef.current = null
-            }
-            // Check if reader has a reset or stopContinuousDecode method before calling
-            const readerObj = reader as { reset?: () => void; stopContinuousDecode?: () => Promise<void> }
-            if (typeof readerObj.reset === "function") {
-              readerObj.reset()
-            } else if (typeof readerObj.stopContinuousDecode === "function") {
-              readerObj.stopContinuousDecode().catch(() => {})
-            }
-          } catch {}
         }
       }
 
@@ -253,9 +228,9 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
 
   function stopCamera() {
     setIsCameraActive(false)
-    if (controlsRef.current) {
-      controlsRef.current.stop()
-      controlsRef.current = null
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
@@ -264,21 +239,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
-    const reader = readerRef.current as { reset?: () => void; stopContinuousDecode?: () => Promise<void> } | null
-    if (reader?.reset) {
-      reader.reset()
-    } else if (reader?.stopContinuousDecode) {
-      reader.stopContinuousDecode().catch(() => {})
-    }
-    decodePromiseRef.current = null
   }
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-      stopCamera()
-    }
-  }, [])
 
   return (
     <div className="space-y-4">
@@ -317,6 +278,11 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             isCameraActive ? "opacity-100" : "opacity-0"
           }`}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+        <canvas
+          ref={canvasRef}
+          className="hidden"
+          style={{ display: "none" }}
         />
         {isCameraActive && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
