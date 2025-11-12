@@ -1,0 +1,78 @@
+{
+  "name": "Secure Attendance System",
+  "short_name": "Attendance",
+  "description": "Teacher and student attendance tracking with QR codes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-light-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-dark-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-dark-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/screenshot2.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Teacher Dashboard",
+      "short_name": "Teacher",
+      "description": "Access teacher attendance dashboard",
+      "url": "/teacher",
+      "icons": [
+        {
+          "src": "/icon-dark-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Student Scanner",
+      "short_name": "Student",
+      "description": "Scan QR code for attendance",
+      "url": "/student",
+      "icons": [
+        {
+          "src": "/icon-dark-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
