@@ -60,6 +60,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
       hasScannedRef.current = true
       const scannedText = code.data
       console.log("[QRScanner] ✅ QR detected:", scannedText)
+      console.log("[QRScanner] Calling onScan callback with data:", scannedText.substring(0, 50) + "...")
 
       navigator.vibrate?.(200)
 
@@ -84,7 +85,14 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
       if (isMountedRef.current) {
         setIsCameraActive(false)
       }
-      onScan(scannedText)
+      
+      // Call the callback
+      try {
+        onScan(scannedText)
+        console.log("[QRScanner] onScan callback executed successfully")
+      } catch (error) {
+        console.error("[QRScanner] Error in onScan callback:", error)
+      }
       return
     }
 
@@ -95,14 +103,21 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
   async function startCamera() {
     if (!isMountedRef.current || !videoRef.current) return
 
+    console.log("[QRScanner] Starting camera...")
     setError(null)
     setPermissionDenied(false)
     hasScannedRef.current = false
-
-    // Stop any existing scanning
+    
+    // Reset any existing scanning
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
+    }
+    
+    // Stop any existing stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
     }
 
     try {
@@ -269,15 +284,25 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
         className="relative w-full bg-black rounded-lg overflow-hidden"
         style={{ aspectRatio: "16/9", minHeight: 240 }}
       >
+        {!isCameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            <p className="text-white/50 text-sm">Camera preview will appear here</p>
+          </div>
+        )}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-            isCameraActive ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ 
+            width: "100%", 
+            height: "100%", 
+            objectFit: "cover",
+            opacity: isCameraActive ? 1 : 0,
+            transition: "opacity 0.3s",
+            zIndex: isCameraActive ? 1 : 0
+          }}
         />
         <canvas
           ref={canvasRef}
