@@ -19,6 +19,8 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
   const hasScannedRef = useRef(false)
   const isMountedRef = useRef(true)
   const decodePromiseRef = useRef<Promise<unknown> | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+
 
   useEffect(() => {
     readerRef.current = new BrowserMultiFormatReader()
@@ -28,7 +30,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
   }, [])
 
   async function startCamera() {
-    if (!isMountedRef.current) return
+    if (!isMountedRef.current || !videoRef.current) return
 
     setError(null)
     setPermissionDenied(false)
@@ -36,6 +38,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
 
     try {
       const reader = readerRef.current!
+      const videoElement = videoRef.current
 
       if (!isMountedRef.current) return
       setIsCameraActive(true)
@@ -52,16 +55,43 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
         try {
           console.log("[QRScanner] Attempting camera with constraints:", constraints)
 
-          decodePromiseRef.current = reader.decodeFromConstraints(
-            constraints,
-            videoRef.current!,
-            (result, err, controls) => {
+          // Get the video stream first
+          const stream = await navigator.mediaDevices.getUserMedia(constraints)
+          streamRef.current = stream
+          
+          if (!isMountedRef.current || !videoElement) {
+            stream.getTracks().forEach(track => track.stop())
+            streamRef.current = null
+            return
+          }
+
+          // Set the stream to the video element
+          videoElement.srcObject = stream
+          await new Promise((resolve) => {
+            videoElement.onloadedmetadata = () => {
+              videoElement.play()
+              resolve(undefined)
+            }
+          })
+
+          // Wait a bit for video to be ready
+          await new Promise(resolve => setTimeout(resolve, 500))
+
+          if (!isMountedRef.current || !videoElement) {
+            stream.getTracks().forEach(track => track.stop())
+            streamRef.current = null
+            return
+          }
+
+          // Use decodeFromVideoElement for continuous scanning
+          const controls = await reader.decodeFromVideoElement(
+            videoElement,
+            (result, err) => {
               if (!isMountedRef.current) {
                 controls.stop()
                 return
               }
 
-              controlsRef.current = controls
 
               if (result && !hasScannedRef.current) {
                 hasScannedRef.current = true
@@ -78,8 +108,13 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
                     }
                   }, 2000)
                 }
-
-                controls.stop()
+                if (controls) {
+                   controls.stop()
+                }
+                if (streamRef.current) {
+                  streamRef.current.getTracks().forEach(track => track.stop())
+                  streamRef.current = null
+                }
                 controlsRef.current = null
                 if (isMountedRef.current) {
                   setIsCameraActive(false)
@@ -95,7 +130,7 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             },
           )
 
-          await decodePromiseRef.current
+          controlsRef.current = controls
           return // Successfully started, exit retry loop
         } catch (err) {
           lastError = err
@@ -105,7 +140,11 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
             errorObj?.name ?? "UnknownError",
             errorObj?.message,
           )
-
+          // Clean up stream if it exists
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop())
+            streamRef.current = null
+          }
           // Stop the reader before retrying
           try {
             if (controlsRef.current) {
@@ -113,11 +152,11 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
               controlsRef.current = null
             }
             // Check if reader has a reset or stopContinuousDecode method before calling
-            const readerObj = reader as { reset?: () => void; stopContinuousDecode?: () => Promise<void> };
+            const readerObj = reader as { reset?: () => void; stopContinuousDecode?: () => Promise<void> }
             if (typeof readerObj.reset === "function") {
-              readerObj.reset();
+              readerObj.reset()
             } else if (typeof readerObj.stopContinuousDecode === "function") {
-              readerObj.stopContinuousDecode().catch(() => {});
+              readerObj.stopContinuousDecode().catch(() => {})
             }
           } catch {}
         }
@@ -152,13 +191,19 @@ export default function QRScanner({ onScan, isLoading }: QRScannerProps) {
       controlsRef.current.stop()
       controlsRef.current = null
     }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
     const reader = readerRef.current as { reset?: () => void; stopContinuousDecode?: () => Promise<void> } | null
     if (reader?.reset) {
       reader.reset()
     } else if (reader?.stopContinuousDecode) {
       reader.stopContinuousDecode().catch(() => {})
     }
-    readerRef.current = null
     decodePromiseRef.current = null
   }
 
