@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     const secret = process.env.HMAC_SECRET || "default-secret-key"
-    const isValid = verifyQRPayload(payload, secret)
+    const isValid = await verifyQRPayload(payload, secret)
 
     if (!isValid) {
       return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
