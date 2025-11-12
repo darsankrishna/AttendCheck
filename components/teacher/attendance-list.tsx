@@ -5,6 +5,8 @@ import { CheckCircle, AlertCircle, Clock } from "lucide-react"
 
 interface Submission {
   studentId: string
+  studentName?: string
+  studentEmail?: string
   timestamp: string
   verified: boolean
   livenessAction?: string
@@ -50,10 +52,20 @@ export function AttendanceList({ submissions }: AttendanceListProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <p className="font-semibold text-foreground truncate">{submission.studentId}</p>
+                  <p className="font-semibold text-foreground truncate">
+                    {submission.studentName || submission.studentId}
+                  </p>
+                  {submission.studentName && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      ({submission.studentId})
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span>{new Date(submission.timestamp).toLocaleTimeString()}</span>
+                  {submission.studentEmail && (
+                    <span className="truncate max-w-[150px]">{submission.studentEmail}</span>
+                  )}
                   {submission.livenessAction && (
                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full">
                       {submission.livenessAction}

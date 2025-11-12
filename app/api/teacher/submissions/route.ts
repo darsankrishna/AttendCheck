@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
       sessionId: validatedSessionId,
       submissions: submissions.map((s) => ({
         studentId: s.student_id,
+        studentName: s.student_name,
+        studentEmail: s.student_email,
         timestamp: s.timestamp,
         verified: s.verified,
         livenessAction: s.liveness_action,

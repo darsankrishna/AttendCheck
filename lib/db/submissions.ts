@@ -100,13 +100,13 @@ export async function getSubmissions(sessionId: string): Promise<AttendanceSubmi
 export async function getSubmissionsByTeacher(
   teacherId: string,
   sessionId: string
-): Promise<AttendanceSubmission[]> {
+): Promise<(AttendanceSubmission & { student_name?: string; student_email?: string })[]> {
   const supabase = await createClient()
 
-  // Verify teacher owns the session
+  // Verify teacher owns the session and get class_id
   const { data: session } = await supabase
     .from("sessions")
-    .select("id")
+    .select("id, class_id")
     .eq("id", sessionId)
     .eq("teacher_id", teacherId)
     .single()
@@ -115,6 +115,56 @@ export async function getSubmissionsByTeacher(
     throw new Error("Session not found or access denied")
   }
 
+  // Get submissions with student details if class_id exists
+  if (session.class_id) {
+    // First get all submissions
+    const { data: submissions, error: submissionsError } = await supabase
+      .from("attendance_submissions")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("timestamp", { ascending: false })
+
+    if (submissionsError) {
+      throw new Error(`Failed to get submissions: ${submissionsError.message}`)
+    }
+
+    if (!submissions || submissions.length === 0) {
+      return []
+    }
+
+    // Get all student IDs from submissions
+    const studentIds = submissions.map(s => s.student_id)
+
+    // Get student details for this class
+    const { data: students, error: studentsError } = await supabase
+      .from("students")
+      .select("student_id, name, email")
+      .eq("class_id", session.class_id)
+      .in("student_id", studentIds)
+
+    if (studentsError) {
+      console.warn("Failed to get student details:", studentsError.message)
+      // Return submissions without student details if lookup fails
+      return submissions
+    }
+
+    // Create a map of student_id -> student details
+    const studentMap = new Map(
+      (students || []).map(s => [s.student_id, s])
+    )
+
+    // Map submissions with student details
+    return submissions.map((submission: any) => {
+      const student = studentMap.get(submission.student_id)
+      return {
+        ...submission,
+        student_name: student?.name,
+        student_email: student?.email,
+      }
+    })
+  }
+
+  // If no class_id, just return submissions without student details
   return getSubmissions(sessionId)
 }
 

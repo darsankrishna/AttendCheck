@@ -17,7 +17,7 @@ interface ClassData {
 }
 
 interface ClassSelectorProps {
-  onClassSelected: (students: StudentData[]) => void
+  onClassSelected: (classId: string, students: StudentData[]) => void
   onCreateNew: () => void
 }
 
@@ -62,7 +62,7 @@ export const ClassSelector = ({ onClassSelected, onCreateNew }: ClassSelectorPro
 
   const handleSelectClass = (classData: ClassData) => {
     setSelectedClass(classData)
-    onClassSelected(classData.students)
+    onClassSelected(classData.id, classData.students)
   }
 
   const handleDeleteClass = async (classId: string) => {

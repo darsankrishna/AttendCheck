@@ -15,12 +15,17 @@ export function TeacherPageClient() {
   const [isLoading, setIsLoading] = useState(false)
   const [view, setView] = useState<"selector" | "creator" | "session">("selector")
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([])
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
 
   const handleStartSession = async () => {
     setIsLoading(true)
     try {
       const response = await fetch("/api/teacher/start-session", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId: selectedClassId,
+        }),
       })
       const data = await response.json()
       if (!response.ok) {
@@ -43,6 +48,7 @@ export function TeacherPageClient() {
     setExpiresAt("")
     setView("selector")
     setSelectedStudents([])
+    setSelectedClassId(null)
   }
 
   return (
@@ -64,7 +70,8 @@ export function TeacherPageClient() {
         {view === "selector" && !isActive && (
           <div className="space-y-6">
             <ClassSelector
-              onClassSelected={(students) => {
+              onClassSelected={(classId, students) => {
+                setSelectedClassId(classId)
                 setSelectedStudents(students)
               }}
               onCreateNew={() => setView("creator")}
