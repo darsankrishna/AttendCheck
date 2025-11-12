@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { CheckCircle, AlertCircle } from "lucide-react"
+import { CheckCircle, AlertCircle, Clock } from "lucide-react"
 
 interface Submission {
   studentId: string
@@ -17,41 +17,57 @@ interface AttendanceListProps {
 export function AttendanceList({ submissions }: AttendanceListProps) {
   if (submissions.length === 0) {
     return (
-      <Card className="bg-card border-border p-6 text-center">
-        <p className="text-muted-foreground">Waiting for student submissions...</p>
-      </Card>
+      <div className="p-12 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+          <Clock className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <p className="text-muted-foreground text-lg mb-1">Waiting for submissions</p>
+        <p className="text-sm text-muted-foreground">Students will appear here once they scan the QR code</p>
+      </div>
     )
   }
 
   return (
-    <Card className="bg-card border-border overflow-hidden">
-      <div className="divide-y divide-border">
-        {submissions.map((submission) => (
-          <div
-            key={`${submission.studentId}-${submission.timestamp}`}
-            className="p-4 hover:bg-input/50 transition-colors"
-          >
-            <div className="flex items-start justify-between gap-3">
+    <div className="divide-y divide-border max-h-[600px] overflow-y-auto">
+      {submissions.map((submission, index) => (
+        <div
+          key={`${submission.studentId}-${submission.timestamp}`}
+          className="p-4 hover:bg-muted/50 transition-colors animate-in fade-in slide-in-from-right"
+          style={{ animationDelay: `${index * 50}ms` }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className={`mt-0.5 p-1.5 rounded-full ${
+                submission.verified 
+                  ? 'bg-green-500/20' 
+                  : 'bg-red-500/20'
+              }`}>
+                {submission.verified ? (
+                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <p className="font-mono text-sm text-foreground truncate">{submission.studentId}</p>
-                  {submission.verified ? (
-                    <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="font-semibold text-foreground truncate">{submission.studentId}</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{new Date(submission.timestamp).toLocaleTimeString()}</span>
+                  {submission.livenessAction && (
+                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                      {submission.livenessAction}
+                    </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{new Date(submission.timestamp).toLocaleTimeString()}</p>
               </div>
-              {submission.livenessAction && (
-                <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
-                  {submission.livenessAction}
-                </span>
-              )}
+            </div>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {new Date(submission.timestamp).toLocaleDateString()}
             </div>
           </div>
-        ))}
-      </div>
-    </Card>
+        </div>
+      ))}
+    </div>
   )
 }

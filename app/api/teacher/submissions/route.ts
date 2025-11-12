@@ -1,30 +1,36 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { store } from "@/lib/store"
+import { getSubmissionsByTeacher } from "@/lib/db/submissions"
+import { requireAuth } from "@/lib/api/auth"
+import { handleApiError, ValidationError, NotFoundError } from "@/lib/api/errors"
+import { validateSessionId } from "@/lib/api/validation"
 
 export async function GET(request: NextRequest) {
   try {
+    const { user } = await requireAuth()
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get("sessionId")
 
     if (!sessionId) {
-      return NextResponse.json({ error: "sessionId is required" }, { status: 400 })
+      throw new ValidationError("sessionId is required")
     }
 
-    const submissions = store.getSubmissions(sessionId)
-    console.log("[Submissions API] Fetching submissions for sessionId:", sessionId, "Count:", submissions.length)
+    const validatedSessionId = validateSessionId(sessionId)
+
+    const submissions = await getSubmissionsByTeacher(user.id, validatedSessionId)
+
+    console.log("[Submissions API] Fetching submissions for sessionId:", validatedSessionId, "Count:", submissions.length)
 
     return NextResponse.json({
-      sessionId,
+      sessionId: validatedSessionId,
       submissions: submissions.map((s) => ({
-        studentId: s.studentId,
+        studentId: s.student_id,
         timestamp: s.timestamp,
         verified: s.verified,
-        livenessAction: s.livenessAction,
+        livenessAction: s.liveness_action,
       })),
       count: submissions.length,
     })
   } catch (error) {
-    console.error("[Submissions API] Error fetching submissions:", error)
-    return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 })
+    return handleApiError(error)
   }
 }

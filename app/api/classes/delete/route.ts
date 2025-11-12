@@ -1,29 +1,23 @@
-import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { deleteClass } from "@/lib/db/classes"
+import { requireAuth } from "@/lib/api/auth"
+import { handleApiError, ValidationError } from "@/lib/api/errors"
+import { validateRequired } from "@/lib/api/validation"
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { user } = await requireAuth()
+    const { searchParams } = new URL(request.url)
+    const classId = searchParams.get("classId")
 
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    if (!classId) {
+      throw new ValidationError("classId is required")
     }
 
-    const { classId } = await request.json()
-
-    const { error } = await supabase.from("classes").delete().eq("id", classId).eq("teacher_id", user.id)
-
-    if (error) throw error
+    await deleteClass(classId, user.id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting class:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete class" },
-      { status: 500 },
-    )
+    return handleApiError(error)
   }
 }

@@ -1,53 +1,16 @@
-import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { getClasses } from "@/lib/db/classes"
+import { requireAuth } from "@/lib/api/auth"
+import { handleApiError } from "@/lib/api/errors"
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { user } = await requireAuth()
 
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
-    }
+    const classes = await getClasses(user.id)
 
-    const { data: classes, error } = await supabase
-      .from("classes")
-      .select(`
-        id,
-        name,
-        created_at,
-        students (
-          id,
-          student_id,
-          name,
-          email
-        )
-      `)
-      .eq("teacher_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (error) throw error
-
-    const formattedClasses =
-      classes?.map((cls: any) => ({
-        id: cls.id,
-        name: cls.name,
-        students: cls.students.map((s: any) => ({
-          id: s.student_id,
-          name: s.name,
-          email: s.email,
-        })),
-      })) || []
-
-    console.log("[v0] Returning formatted classes:", formattedClasses)
-    return NextResponse.json(formattedClasses)
+    return NextResponse.json(classes)
   } catch (error) {
-    console.error("Error listing classes:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to list classes" },
-      { status: 500 },
-    )
+    return handleApiError(error)
   }
 }

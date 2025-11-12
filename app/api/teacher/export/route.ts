@@ -1,37 +1,43 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { store } from "@/lib/store"
+import { getSubmissionsByTeacher } from "@/lib/db/submissions"
+import { requireAuth } from "@/lib/api/auth"
+import { handleApiError, ValidationError } from "@/lib/api/errors"
+import { validateSessionId } from "@/lib/api/validation"
 
 export async function GET(request: NextRequest) {
   try {
+    const { user } = await requireAuth()
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get("sessionId")
 
     if (!sessionId) {
-      return NextResponse.json({ error: "sessionId is required" }, { status: 400 })
+      throw new ValidationError("sessionId is required")
     }
 
-    console.log("[v0] Exporting session:", sessionId)
-    const session = store.getSession(sessionId)
+    const validatedSessionId = validateSessionId(sessionId)
 
-    if (!session) {
-      console.error("[v0] Session not found:", sessionId)
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
-    }
+    const submissions = await getSubmissionsByTeacher(user.id, validatedSessionId)
 
-    const csv = store.exportAsCSV(sessionId)
-    console.log("[v0] CSV exported successfully, length:", csv.length)
+    // Generate CSV
+    const headers = ["Student ID", "Timestamp", "Verified", "Liveness Action"]
+    const rows = submissions.map((s) => [
+      s.student_id,
+      s.timestamp,
+      s.verified ? "Yes" : "No",
+      s.liveness_action || "-",
+    ])
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
 
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="attendance-${sessionId}.csv"`,
+        "Content-Disposition": `attachment; filename="attendance-${validatedSessionId}.csv"`,
       },
     })
   } catch (error) {
-    console.error("[v0] Error exporting CSV:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to export CSV" },
-      { status: 500 },
-    )
+    return handleApiError(error)
   }
 }
