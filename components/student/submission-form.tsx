@@ -56,13 +56,32 @@ export function SubmissionForm({ sessionId, onSuccess }: SubmissionFormProps) {
     setMessage("")
 
     try {
+            // Parse the scanned QR data to extract sessionId
+      let qrPayload: { sid?: string }
+      try {
+        qrPayload = JSON.parse(scannedData)
+      } catch (parseError) {
+        setStatus("error")
+        setMessage("Invalid QR code format. Please scan again.")
+        setIsSubmitting(false)
+        return
+      }
+
+      if (!qrPayload.sid) {
+        setStatus("error")
+        setMessage("QR code missing session ID. Please scan again.")
+        setIsSubmitting(false)
+        return
+      }
       const response = await fetch("/api/attendance/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId,
-          qrData: scannedData,
+          sessionId: qrPayload.sid,
+          token: scannedData, // The full JSON string as token
           selfieImage,
+          timestamp: new Date().toISOString(),         
         }),
       })
 
