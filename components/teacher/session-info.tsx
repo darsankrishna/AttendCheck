@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Clock, Copy } from "lucide-react"
@@ -17,6 +18,11 @@ export function SessionInfo({ sessionId, expiresAt, onExport, submissionCount }:
   }
 
   const timeRemaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000))
+  
+  // Debug log to track count updates
+  useEffect(() => {
+    console.log("[SessionInfo] Submission count updated:", submissionCount)
+  }, [submissionCount])
 
   return (
     <Card className="bg-card border-border p-4">

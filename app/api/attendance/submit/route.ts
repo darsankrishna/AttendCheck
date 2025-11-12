@@ -44,10 +44,19 @@ export async function POST(request: NextRequest) {
     }
 
     const added = store.addSubmission(submission)
+    console.log("[Submit API] Adding submission:", {
+      studentId,
+      sessionId,
+      added,
+      currentCount: store.getSubmissions(sessionId).length
+    })
 
     if (!added) {
       return NextResponse.json({ error: "Student already submitted for this session" }, { status: 409 })
     }
+
+    const finalCount = store.getSubmissions(sessionId).length
+    console.log("[Submit API] Submission added successfully. New count:", finalCount)
 
     return NextResponse.json({
       success: true,

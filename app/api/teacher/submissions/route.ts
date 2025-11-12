@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     }
 
     const submissions = store.getSubmissions(sessionId)
+    console.log("[Submissions API] Fetching submissions for sessionId:", sessionId, "Count:", submissions.length)
 
     return NextResponse.json({
       sessionId,
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
       count: submissions.length,
     })
   } catch (error) {
-    console.error("Error fetching submissions:", error)
+    console.error("[Submissions API] Error fetching submissions:", error)
     return NextResponse.json({ error: "Failed to fetch submissions" }, { status: 500 })
   }
 }

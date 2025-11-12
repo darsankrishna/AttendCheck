@@ -55,25 +55,44 @@ export function QRSession({ sessionId, expiresAt, isActive, onStop }: QRSessionP
 
   // Poll for submissions
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive) {
+      console.log("[QRSession] Polling disabled - session not active")
+      return
+    }
 
     const pollSubmissions = async () => {
       try {
+        console.log("[QRSession] Polling submissions for sessionId:", sessionId)
         const response = await fetch(`/api/teacher/submissions?sessionId=${sessionId}`)
         if (!response.ok) {
-          console.error("[v0] Submissions fetch failed:", response.status)
+          console.error("[QRSession] Submissions fetch failed:", response.status)
           return
         }
         const data = await response.json()
-        setSubmissions(data.submissions || [])
+        console.log("[QRSession] Submissions received:", {
+          count: data.count,
+          submissionsLength: data.submissions?.length || 0,
+          submissions: data.submissions
+        })
+        setSubmissions(prev => {
+          const newSubmissions = data.submissions || []
+          if (newSubmissions.length !== prev.length) {
+            console.log("[QRSession] Submissions count changed:", prev.length, "->", newSubmissions.length)
+          }
+          return newSubmissions
+        })
       } catch (error) {
-        console.error("Failed to fetch submissions:", error)
+        console.error("[QRSession] Failed to fetch submissions:", error)
       }
     }
 
+    console.log("[QRSession] Starting submission polling for sessionId:", sessionId)
     pollSubmissions()
     const interval = setInterval(pollSubmissions, 1000)
-    return () => clearInterval(interval)
+    return () => {
+      console.log("[QRSession] Stopping submission polling")
+      clearInterval(interval)
+    }
   }, [sessionId, isActive])
 
   const handleExport = async () => {
